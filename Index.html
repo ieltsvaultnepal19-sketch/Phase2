@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>IELTSVaultNepal – Diagnostic Test</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: #f0f4f8;
+      color: #1e2a3e;
+      line-height: 1.5;
+    }
+    /* Login screen */
+    #login-screen {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f2b3d 0%, #1e4a6e 100%);
+    }
+    .login-card {
+      background: white;
+      padding: 2rem;
+      border-radius: 1.5rem;
+      width: 360px;
+      text-align: center;
+    }
+    .login-card input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #cbd5e1;
+      border-radius: 2rem;
+    }
+    .login-card button {
+      width: 100%;
+      padding: 10px;
+      background: #1e3a5f;
+      color: white;
+      border: none;
+      border-radius: 2rem;
+      margin-top: 1rem;
+      cursor: pointer;
+    }
+    .error-msg { color: red; margin-top: 10px; }
+
+    /* Main app layout */
+    #app-container { display: none; }
+    .sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 260px;
+      height: 100%;
+      background: white;
+      border-right: 1px solid #e2e8f0;
+      padding: 1.5rem;
+    }
+    .sidebar .logo {
+      font-size: 1.5rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .sidebar nav a {
+      display: block;
+      padding: 10px;
+      margin: 5px 0;
+      color: #334155;
+      text-decoration: none;
+      border-radius: 12px;
+    }
+    .sidebar nav a:hover, .sidebar nav a.active {
+      background: #eef2ff;
+      color: #1e3a5f;
+    }
+    .main-content {
+      margin-left: 260px;
+      padding: 2rem;
+    }
+    .card {
+      background: white;
+      border-radius: 1.5rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .btn {
+      background: #1e3a5f;
+      color: white;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 2rem;
+      cursor: pointer;
+    }
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+    .timer {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); position: fixed; z-index: 100; }
+      .sidebar.open { transform: translateX(0); }
+      .main-content { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-card">
+    <h2>IELTSVaultNepal</h2>
+    <input type="text" id="login-username" placeholder="Username">
+    <input type="password" id="login-password" placeholder="Password">
+    <button id="login-btn">Login</button>
+    <div id="login-error" class="error-msg"></div>
+    <div style="margin-top: 1rem; font-size: 0.8rem;">Demo: student1 / student2 / student3 &nbsp;&nbsp; pw: ielts123</div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app-container">
+  <div class="sidebar" id="sidebar">
+    <div class="logo">📘 IELTSVault</div>
+    <nav>
+      <a href="#" data-section="dashboard">Dashboard</a>
+      <a href="#" data-section="diagnostic">Diagnostic Test</a>
+      <a href="#" data-section="planner">Study Planner</a>
+      <a href="#" data-section="practice">Section Practice</a>
+    </nav>
+  </div>
+  <div class="main-content" id="main-content"></div>
+</div>
+
+<script>
+  // -------------------- USERS --------------------
+  const users = { student1: 'ielts123', student2: 'ielts123', student3: 'ielts123' };
+  let currentUser = null;
+
+  // -------------------- DIAGNOSTIC DATA --------------------
+  let diagState = {
+    listening: null,   // { score: number, total: 5, answers: [] }
+    reading: null,
+    writing: null,     // { score: estimated band from 0-9? we'll use a simple rubric later }
+    speaking: null,
+    overallBand: null,
+    completed: false
+  };
+
+  // Helper to load/save to localStorage per user
+  function loadUserData() {
+    if (!currentUser) return {};
+    const raw = localStorage.getItem(`ielts_${currentUser}`);
+    if (raw) return JSON.parse(raw);
+    return { diagnostic: null };
+  }
+  function saveUserData(data) {
+    if (!currentUser) return;
+    localStorage.setItem(`ielts_${currentUser}`, JSON.stringify(data));
+  }
+
+  // -------------------- RENDER FUNCTIONS --------------------
+  function loadSection(section) {
+    if (section === 'dashboard') renderDashboard();
+    else if (section === 'diagnostic') renderDiagnostic();
+    else {
+      document.getElementById('main-content').innerHTML = `<div class="card"><p>Coming soon: ${section}</p></div>`;
+    }
+  }
+
+  function renderDashboard() {
+    const userData = loadUserData();
+    const diag = userData.diagnostic;
+    const band = diag && diag.overallBand ? diag.overallBand : 'Not taken';
+    const html = `
+      <h2>Dashboard</h2>
+      <div class="card">
+        <h3>Diagnostic Test</h3>
+        <p>Your estimated band: <strong>${band}</strong></p>
+        <button class="btn" onclick="loadSection('diagnostic')">${diag && diag.completed ? 'Retake Diagnostic' : 'Start Diagnostic'}</button>
+      </div>
+      <div class="card">
+        <h3>Quick Actions</h3>
+        <button class="btn btn-secondary" onclick="loadSection('diagnostic')">Take Diagnostic</button>
+      </div>
+    `;
+    document.getElementById('main-content').innerHTML = html;
+  }
+
+  // -------------------- DIAGNOSTIC FLOW --------------------
+  let currentDiagnosticStep = 0; // 0=info, 1=listening,2=reading,3=writing,4=speaking,5=result
+  let listeningAnswers = [];
+  let readingAnswers = [];
+  let writingScore = null;     // will store band (0-9)
+  let speakingScore = null;
+
+  // Listening questions (5 MCQs based on a spoken passage)
+  const listeningPassage = "The IELTS Listening test consists of four recorded monologues and conversations. You hear each recording only once. The first section is a social conversation between two people. The second is a monologue about a general topic. The third is a conversation in an educational context, and the fourth is an academic lecture. You have 30 minutes to listen and answer 40 questions. It is essential to read the instructions carefully and transfer your answers to the answer sheet."
+  const listeningQuestions = [
+    { text: "How many recordings are there in the IELTS Listening test?", options: ["2", "3", "4", "5"], correct: 2 },
+    { text: "How many times do you hear each recording?", options: ["Once", "Twice", "Three times", "As many as you want"], correct: 0 },
+    { text: "What is the total time allowed for the Listening test?", options: ["20 minutes", "30 minutes", "40 minutes", "60 minutes"], correct: 1 },
+    { text: "What is the context of the third section?", options: ["Social conversation", "Monologue about a general topic", "Conversation in an educational context", "Academic lecture"], correct: 2 },
+    { text: "How many questions are there in total?", options: ["20", "30", "40", "50"], correct: 2 }
+  ];
+
+  // Reading passage and 5 questions
+  const readingPassage = "The IELTS Reading test lasts 60 minutes and includes three reading passages. The passages are taken from books, journals, magazines and newspapers. They are written for a general audience, but they are on academic topics. You have to answer 40 questions. The question types include multiple choice, matching headings, True/False/Not Given, sentence completion, and summary completion. One of the most important skills is skimming – reading quickly to get the main idea – and scanning – looking for specific details. Time management is critical because you have only 20 minutes per passage."
+  const readingQuestions = [
+    { text: "How long is the IELTS Reading test?", options: ["30 minutes", "45 minutes", "60 minutes", "90 minutes"], correct: 2 },
+    { text: "How many passages are there?", options: ["2", "3", "4", "5"], correct: 1 },
+    { text: "Which skill means reading quickly for the main idea?", options: ["Scanning", "Skimming", "Paraphrasing", "Summarising"], correct: 1 },
+    { text: "What is the recommended time per passage?", options: ["15 minutes", "20 minutes", "25 minutes", "30 minutes"], correct: 1 },
+    { text: "Which is NOT a typical question type?", options: ["Multiple choice", "Matching headings", "Diagram labelling", "Audio transcription"], correct: 3 }
+  ];
+
+  // Writing task
+  const writingPrompt = "Some people believe that technology has made our lives more complicated. To what extent do you agree or disagree? Write at least 250 words."
+
+  // Speaking cue card
+  const speakingCueCard = "Describe a book that you enjoyed reading. You should say: what the book was, when you read it, what it was about, and explain why you enjoyed it."
+
+  function renderDiagnostic() {
+    if (!diagState.completed) {
+      startDiagnostic();
+    } else {
+      // show result screen
+      const userData = loadUserData();
+      const saved = userData.diagnostic;
+      if (saved && saved.overallBand) {
+        showResultScreen(saved.overallBand);
+      } else {
+        startDiagnostic();
+      }
+    }
+  }
+
+  function startDiagnostic() {
+    currentDiagnosticStep = 0;
+    listeningAnswers = [];
+    readingAnswers = [];
+    writingScore = null;
+    speakingScore = null;
+    showListeningSection();
+  }
+
+  function showListeningSection() {
+    let html = `
+      <div class="card">
+        <h2>📡 Listening Diagnostic</h2>
+        <p><button id="playAudioBtn" class="btn">🔊 Play Listening Passage</button></p>
+        <div id="audioPassage" style="background:#f1f5f9; padding:1rem; border-radius:1rem; margin:1rem 0;"></div>
+        <div id="listeningQuestions"></div>
+        <button id="submitListening" class="btn">Next →</button>
+      </div>
+    `;
+    document.getElementById('main-content').innerHTML = html;
+    // display passage text
+    document.getElementById('audioPassage').innerHTML = `<p>${listeningPassage}</p>`;
+    // generate questions
+    let qHtml = '';
+    listeningQuestions.forEach((q, idx) => {
+      qHtml += `<div style="margin-bottom:1rem;"><strong>${idx+1}. ${q.text}</strong><br>`;
+      q.options.forEach((opt, optIdx) => {
+        qHtml += `<label><input type="radio" name="q${idx}" value="${optIdx}"> ${opt}</label> &nbsp; `;
+      });
+      qHtml += `</div>`;
+    });
+    document.getElementById('listeningQuestions').innerHTML = qHtml;
+    // audio with speech synthesis
+    document.getElementById('playAudioBtn').onclick = () => {
+      const utterance = new SpeechSynthesisUtterance(listeningPassage);
+      utterance.rate = 0.9;
+      window.speechSynthesis.cancel(); // stop previous
+      window.speechSynthesis.speak(utterance);
+    };
+    document.getElementById('submitListening').onclick = () => {
+      let score = 0;
+      for (let i=0; i<listeningQuestions.length; i++) {
+        let selected = document.querySelector(`input[name="q${i}"]:checked`);
+        if (selected && parseInt(selected.value) === listeningQuestions[i].correct) score++;
+      }
+      listeningAnswers = { score, total: listeningQuestions.length };
+      showReadingSection();
+    };
+  }
+
+  function showReadingSection() {
+    let html = `
+      <div class="card">
+        <h2>📖 Reading Diagnostic</h2>
+        <div style="background:#f9f9fc; padding:1rem; border-radius:1rem; margin:1rem 0;">
+          <p><strong>Passage:</strong></p>
+          <p>${readingPassage}</p>
+        </div>
+        <div id="readingQuestions"></div>
+        <button id="submitReading" class="btn">Next →</button>
+      </div>
+    `;
+    document.getElementById('main-content').innerHTML = html;
+    let qHtml = '';
+    readingQuestions.forEach((q, idx) => {
+      qHtml += `<div style="margin-bottom:1rem;"><strong>${idx+1}. ${q.text}</strong><br>`;
+      q.options.forEach((opt, optIdx) => {
+        qHtml += `<label><input type="radio" name="rq${idx}" value="${optIdx}"> ${opt}</label> &nbsp; `;
+      });
+      qHtml += `</div>`;
+    });
+    document.getElementById('readingQuestions').innerHTML = qHtml;
+    document.getElementById('submitReading').onclick = () => {
+      let score = 0;
+      for (let i=0; i<readingQuestions.length; i++) {
+        let selected = document.querySelector(`input[name="rq${i}"]:checked`);
+        if (selected && parseInt(selected.value) === readingQuestions[i].correct) score++;
+      }
+      readingAnswers = { score, total: readingQuestions.length };
+      showWritingSection();
+    };
+  }
+
+  function showWritingSection() {
+    let html = `
+      <div class="card">
+        <h2>✍️ Writing Diagnostic</h2>
+        <p><strong>Task 2 Essay Prompt:</strong></p>
+        <p>${writingPrompt}</p>
+        <textarea id="writingEssay" rows="8" style="width:100%; margin-top:1rem; padding:0.5rem;" placeholder="Write your essay here..."></textarea>
+        <p>Word count: <span id="wordCount">0</span> words (minimum 250 recommended)</p>
+        <button id="submitWriting" class="btn">Next →</button>
+      </div>
+    `;
+    document.getElementById('main-content').innerHTML = html;
+    const textarea = document.getElementById('writingEssay');
+    const wordCountSpan = document.getElementById('wordCount');
+    textarea.addEventListener('input', () => {
+      const words = textarea.value.trim().split(/\s+/).filter(w => w.length > 0).length;
+      wordCountSpan.innerText = words;
+    });
+    document.getElementById('submitWriting').onclick = () => {
+      const words = textarea.value.trim().split(/\s+/).filter(w => w.length > 0).length;
+      // simple band estimation: if >250 words band 6, >300 band 7, else 5
+      let band = 5;
+      if (words >= 250) band = 6;
+      if (words >= 300) band = 7;
+      if (words >= 350) band = 8;
+      writingScore = band;
+      showSpeakingSection();
+    };
+  }
+
+  function showSpeakingSection() {
+    let prepSeconds = 60;
+    let timerInterval = null;
+    let speakingAnswer = '';
+    let html = `
+      <div class="card">
+        <h2>🗣️ Speaking Diagnostic</h2>
+        <p><strong>Cue Card:</strong> ${speakingCueCard}</p>
+        <p>You have <span id="prepTimer">60</span> seconds to prepare. Then you will speak for 1-2 minutes.</p>
+        <button id="startPrepBtn" class="btn">Start Preparation</button>
+        <button id="finishSpeaking" class="btn" style="display:none; margin-top:1rem;">Finish & Submit</button>
+        <div id="speakingResult"></div>
+      </div>
+    `;
+    document.getElementById('main-content').innerHTML = html;
+    const startBtn = document.getElementById('startPrepBtn');
+    const finishBtn = document.getElementById('finishSpeaking');
+    const timerSpan = document.getElementById('prepTimer');
+
+    startBtn.onclick = () => {
+      startBtn.disabled = true;
+      timerInterval = setInterval(() => {
+        if (prepSeconds <= 1) {
+          clearInterval(timerInterval);
+          timerSpan.innerText = "0";
+          startBtn.style.display = 'none';
+          finishBtn.style.display = 'inline-block';
+          document.getElementById('speakingResult').innerHTML = `<p>⏱️ Time's up! Now click "Finish & Submit" after you have spoken.</p>`;
+        } else {
+          prepSeconds--;
+          timerSpan.innerText = prepSeconds;
+        }
+      }, 1000);
+    };
+    finishBtn.onclick = () => {
+      if (timerInterval) clearInterval(timerInterval);
+      // simulate a speaking score (in real scenario, teacher would assess)
+      speakingScore = 6; // default band 6 for demo
+      showResult();
+    };
+  }
+
+  function showResult() {
+    // calculate overall band
+    let listeningBand = (listeningAnswers.score / listeningAnswers.total) * 9;
+    let readingBand = (readingAnswers.score / readingAnswers.total) * 9;
+    let writingBand = writingScore;
+    let speakingBand = speakingScore;
+    let overall = (listeningBand + readingBand + writingBand + speakingBand) / 4;
+    overall = Math.round(overall * 2) / 2; // round to nearest 0.5
+    const resultHtml = `
+      <div class="card">
+        <h2>📊 Diagnostic Results</h2>
+        <p>Listening: ${listeningAnswers.score}/${listeningAnswers.total} → Band ${listeningBand.toFixed(1)}</p>
+        <p>Reading: ${readingAnswers.score}/${readingAnswers.total} → Band ${readingBand.toFixed(1)}</p>
+        <p>Writing: Estimated Band ${writingBand}</p>
+        <p>Speaking: Estimated Band ${speakingBand}</p>
+        <h3>Overall Estimated Band: ${overall}</h3>
+        <button class="btn" id="saveDiagnostic">Save Results</button>
+        <button class="btn btn-secondary" onclick="loadSection('dashboard')">Back to Dashboard</button>
+      </div>
+    `;
+    document.getElementById('main-content').innerHTML = resultHtml;
+    document.getElementById('saveDiagnostic').onclick = () => {
+      const userData = loadUserData();
+      userData.diagnostic = {
+        listening: listeningAnswers,
+        reading: readingAnswers,
+        writing: writingBand,
+        speaking: speakingBand,
+        overallBand: overall,
+        completed: true,
+        date: new Date().toISOString()
+      };
+      saveUserData(userData);
+      alert('Diagnostic results saved!');
+      loadSection('dashboard');
+    };
+  }
+
+  function showResultScreen(savedBand) {
+    const html = `
+      <div class="card">
+        <h2>📊 Your Diagnostic Result</h2>
+        <p>Your estimated overall band: <strong>${savedBand}</strong></p>
+        <button class="btn" onclick="startDiagnostic()">Retake Diagnostic</button>
+        <button class="btn btn-secondary" onclick="loadSection('dashboard')">Dashboard</button>
+      </div>
+    `;
+    document.getElementById('main-content').innerHTML = html;
+  }
+
+  // -------------------- LOGIN --------------------
+  document.getElementById('login-btn').onclick = () => {
+    const uname = document.getElementById('login-username').value.trim().toLowerCase();
+    const pwd = document.getElementById('login-password').value;
+    if (users[uname] && users[uname] === pwd) {
+      currentUser = uname;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-container').style.display = 'block';
+      loadSection('dashboard');
+    } else {
+      document.getElementById('login-error').innerText = 'Invalid credentials';
+    }
+  };
+
+  window.loadSection = loadSection;
+  window.startDiagnostic = startDiagnostic;
+  window.showResultScreen = showResultScreen;
+</script>
+</body>
+</html>
